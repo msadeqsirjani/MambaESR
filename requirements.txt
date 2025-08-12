@@ -1,0 +1,12 @@
+# Core
+numpy>=1.24
+opencv-python>=4.8
+pillow>=10.3
+scikit-image>=0.22
+tqdm>=4.66
+
+# Deep learning (CPU by default; install CUDA-specific builds separately if needed)
+torch>=2.2
+
+# Optional (install manually if you want to use the official Mamba SSM kernels)
+# mamba-ssm==2.2.5

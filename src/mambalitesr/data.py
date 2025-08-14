@@ -6,10 +6,10 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader
 from tqdm import tqdm
-from src.mambalitesr.data import create_dataloaders
-from src.mambalitesr.model import MambaLiteSR
-from src.mambalitesr.losses import DistillationLoss
-from src.mambalitesr.utils import calculate_psnr_y, calculate_ssim_y, save_checkpoint, load_checkpoint
+from .data import create_dataloaders
+from .model import MambaLiteSR
+from .losses import DistillationLoss
+from .utils import calculate_psnr_y, calculate_ssim_y, save_checkpoint, load_checkpoint
 
 def evaluate(model: nn.Module, val_loader: DataLoader, device: torch.device) -> tuple[float, float]:
     model.eval()

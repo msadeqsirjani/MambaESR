@@ -27,6 +27,12 @@ class TrainConfig:
     use_kd: bool = False            # set True to enable KD with teacher
     alpha: float = 0.8              # fixed KD alpha (teacher vs GT)
     alpha_dynamic: bool = False     # placeholder for adaptive alpha
+    # Distillation/Perceptual/Adversarial loss weights
+    beta: float = 0.1               # perceptual weight
+    temperature: float = 1.0        # KD temperature
+    # GAN options
+    use_gan: bool = False
+    d_lr: float = 1e-4
     # Output
     out_dir: str = "runs/latest"
 

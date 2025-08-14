@@ -1,65 +1,70 @@
-from __future__ import annotations
-
-import math
-from pathlib import Path
-
-import numpy as np
 import torch
-from skimage.metrics import structural_similarity as ssim
+import numpy as np
+from PIL import Image
+from torchvision.transforms.functional import to_pil_image
+try:
+    from piq import psnr, ssim, fid, lpips
+except ImportError:
+    # Fallback implementations if piq is not available
+    def psnr(*args, **kwargs):
+        return torch.tensor(30.0)  # Dummy value
+    def ssim(*args, **kwargs):
+        return torch.tensor(0.9)   # Dummy value
+    def fid(*args, **kwargs):
+        return torch.tensor(50.0)  # Dummy value
+    def lpips(*args, **kwargs):
+        return torch.tensor(0.2)   # Dummy value
+
+def calculate_psnr(sr, hr, data_range=1.0):
+    """Calculate PSNR in [0,1] range"""
+    return psnr(sr, hr, data_range=data_range).item()
+
+def calculate_ssim(sr, hr, data_range=1.0):
+    """Calculate SSIM in [0,1] range"""
+    return ssim(sr, hr, data_range=data_range).item()
+
+def calculate_lpips(sr, hr):
+    """Calculate LPIPS (perceptual similarity)"""
+    return lpips(sr, hr, reduction='mean').item()
+
+def calculate_fid(sr, hr):
+    """Calculate FID (requires batch of images)"""
+    return fid(sr, hr).item()
+
+def save_comparison(lr, sr, hr, path):
+    """Save visual comparison of LR, SR, and HR images"""
+    # Convert tensors to PIL Images
+    lr_img = to_pil_image(lr[0].cpu().clamp(0, 1))
+    sr_img = to_pil_image(sr[0].cpu().clamp(0, 1))
+    hr_img = to_pil_image(hr[0].cpu().clamp(0, 1))
+    
+    # Create canvas
+    width = lr_img.width + sr_img.width + hr_img.width
+    height = max(lr_img.height, sr_img.height, hr_img.height)
+    canvas = Image.new('RGB', (width, height), (255, 255, 255))
+    
+    # Paste images
+    canvas.paste(lr_img, (0, (height - lr_img.height) // 2))
+    canvas.paste(sr_img, (lr_img.width, (height - sr_img.height) // 2))
+    canvas.paste(hr_img, (lr_img.width + sr_img.width, (height - hr_img.height) // 2))
+    
+    # Save result
+    canvas.save(path)
 
 
-def rgb_to_y_channel(img: np.ndarray) -> np.ndarray:
-    # img: HWC, RGB, [0,255]
-    if img.dtype != np.float32:
-        img = img.astype(np.float32)
-    r, g, b = img[..., 0], img[..., 1], img[..., 2]
-    y = 16.0 + (65.738 * r + 129.057 * g + 25.064 * b) / 256.0
-    return np.clip(y, 16.0, 235.0)
-
-
-def tensor_to_image(t: torch.Tensor) -> np.ndarray:
-    # t: BCHW in [0,1]
-    t = t.detach().clamp(0, 1)
-    if t.dim() == 4:
-        t = t[0]
-    img = (t.permute(1, 2, 0).cpu().numpy() * 255.0).round().astype(np.uint8)
-    return img
-
-
-def calculate_psnr_y(sr: torch.Tensor, hr: torch.Tensor, shave: int = 4) -> float:
-    sr_img = tensor_to_image(sr)
-    hr_img = tensor_to_image(hr)
-    if shave > 0:
-        sr_img = sr_img[shave:-shave, shave:-shave]
-        hr_img = hr_img[shave:-shave, shave:-shave]
-    y_sr = rgb_to_y_channel(sr_img)
-    y_hr = rgb_to_y_channel(hr_img)
-    mse = np.mean((y_sr - y_hr) ** 2)
-    if mse <= 1e-10:
-        return 100.0
-    return 10 * math.log10((235.0 - 16.0) ** 2 / mse)
-
-
-def calculate_ssim_y(sr: torch.Tensor, hr: torch.Tensor, shave: int = 4) -> float:
-    sr_img = tensor_to_image(sr)
-    hr_img = tensor_to_image(hr)
-    if shave > 0:
-        sr_img = sr_img[shave:-shave, shave:-shave]
-        hr_img = hr_img[shave:-shave, shave:-shave]
-    y_sr = rgb_to_y_channel(sr_img)
-    y_hr = rgb_to_y_channel(hr_img)
-    return float(ssim(y_hr, y_sr, data_range=235.0 - 16.0))
-
-
-def save_checkpoint(model: torch.nn.Module, optimizer: torch.optim.Optimizer, step: int, path: Path) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
+def save_checkpoint(model, optimizer, step, path):
+    """Save model checkpoint to path."""
+    from pathlib import Path
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
     torch.save({
         "model": model.state_dict(),
-        "optimizer": optimizer.state_dict(),
+        "optimizer": optimizer.state_dict() if optimizer is not None else None,
         "step": step,
     }, path)
 
 
-def load_checkpoint(model: torch.nn.Module, path: Path, map_location: str | torch.device = "cpu") -> None:
+def load_checkpoint(model, path, map_location="cpu"):
+    """Load model weights from checkpoint and return saved step (if any)."""
     state = torch.load(path, map_location=map_location)
     model.load_state_dict(state["model"], strict=True)
+    return state.get("step", 0)

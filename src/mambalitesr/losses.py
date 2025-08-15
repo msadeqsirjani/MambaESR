@@ -1,20 +1,27 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torchvision.models import vgg19
+from torchvision.models import vgg19, VGG19_Weights
 
 class VGGPerceptualLoss(nn.Module):
     def __init__(self):
         super().__init__()
-        vgg = vgg19(pretrained=True).features[:35].eval()
+        # Use modern weights API and eval mode
+        vgg = vgg19(weights=VGG19_Weights.DEFAULT).features[:35].eval()
         for param in vgg.parameters():
             param.requires_grad = False
         self.vgg = vgg
         self.mse = nn.MSELoss()
         
     def forward(self, input, target):
-        input_vgg = self.vgg(self.normalize(input))
-        target_vgg = self.vgg(self.normalize(target.detach()))
+        # Ensure VGG is on the same device as inputs
+        vgg_device = next(self.vgg.parameters()).device
+        if vgg_device != input.device:
+            self.vgg = self.vgg.to(input.device)
+        # Use AMP to reduce memory during perceptual feature extraction
+        with torch.amp.autocast('cuda', enabled=input.is_cuda):
+            input_vgg = self.vgg(self.normalize(input))
+            target_vgg = self.vgg(self.normalize(target.detach()))
         return self.mse(input_vgg, target_vgg)
     
     def normalize(self, x):

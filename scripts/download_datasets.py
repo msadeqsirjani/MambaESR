@@ -9,9 +9,9 @@ import shutil
 # Hardcoded settings
 # ==========================
 ROOT = Path("data")
-SKIP_DIV2K = False  # You already have DIV2K; set to False to auto-download
-DOWNLOAD_BENCHMARKS = False  # Download Set5/Set14/BSD100/Urban100 if missing
-POPULATE_DF2K_FROM_DIV2K = False  # Copy DIV2K_train_HR into DF2K/HR if DF2K/HR is empty
+SKIP_DIV2K = True  # You already have DIV2K; set to False to auto-download
+DOWNLOAD_BENCHMARKS = True  # Download Set5/Set14/BSD100/Urban100 if missing
+POPULATE_DF2K_FROM_DIV2K = True  # Copy DIV2K_train_HR into DF2K/HR if DF2K/HR is empty
 
 # ==========================
 # URLs

@@ -1,153 +1,176 @@
 from __future__ import annotations
 from pathlib import Path
-from typing import List
+from typing import Tuple, List
+
+import random
+from PIL import Image
+from torchvision.transforms.functional import to_tensor as tv_to_tensor
+from torchvision.transforms.functional import hflip, vflip
+
 import torch
-import torch.nn as nn
-import torch.optim as optim
-from torch.utils.data import DataLoader
-from tqdm import tqdm
-from .data import create_dataloaders
-from .model import MambaLiteSR
-from .losses import DistillationLoss
-from .utils import calculate_psnr_y, calculate_ssim_y, save_checkpoint, load_checkpoint
+import torch.nn.functional as F
+from torch.utils.data import Dataset, DataLoader
 
-def evaluate(model: nn.Module, val_loader: DataLoader, device: torch.device) -> tuple[float, float]:
-    model.eval()
-    psnrs: List[float] = []
-    ssims: List[float] = []
-    with torch.inference_mode():
-        for batch in val_loader:
-            lr = batch["lr"].to(device)
-            hr = batch["hr"].to(device)
-            sr = model(lr)
-            psnrs.append(calculate_psnr_y(sr, hr))
-            ssims.append(calculate_ssim_y(sr, hr))
-    return float(sum(psnrs) / len(psnrs)), float(sum(ssims) / len(ssims))
 
-def main() -> None:
-    # Hardcoded configuration parameters
-    DATA_ROOT = "./data/DIV2K_train_HR" 
-    SCALE = 4
-    BATCH_SIZE = 16
-    PATCH_SIZE = 64
-    NUM_WORKERS = 4
-    USE_KD = True
-    TEACHER_CKPT = "./output/teacher/checkpoint.pt"  # Update if using KD
-    EMBED_DIM = 64
-    NUM_RMMB = 8
-    MIXERS_PER_BLOCK = 4
-    LOW_RANK = 32
-    ALPHA = 0.5  # Distillation loss weight
-    LR = 1e-4
-    WEIGHT_DECAY = 1e-4
-    MILESTONES = [200, 400, 600]
-    GAMMA = 0.5
-    EPOCHS = 1000
-    OUT_DIR = "./output/runs/experiment1" 
+IMG_EXTENSIONS = {".png", ".jpg", ".jpeg", ".bmp", ".tif", ".tiff"}
 
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    
-    # Create dataloaders
-    train_loader, val_loader = create_dataloaders(
-        data_root=DATA_ROOT,
-        scale=SCALE,
-        batch_size=BATCH_SIZE,
-        lr_patch_size=PATCH_SIZE,
-        num_workers=NUM_WORKERS,
+
+def _is_image_file(path: Path) -> bool:
+    return path.suffix.lower() in IMG_EXTENSIONS
+
+
+def _load_image_as_tensor(path: Path) -> torch.Tensor:
+    # Returns CxHxW float tensor in [0,1]
+    img = Image.open(path).convert("RGB")
+    return tv_to_tensor(img)
+
+
+def _bicubic_downsample(image: torch.Tensor, scale: int) -> torch.Tensor:
+    # image: CxHxW in [0,1]
+    c, h, w = image.shape
+    nh = (h // scale) * 1
+    nw = (w // scale) * 1
+    image = image[:, : (nh * scale), : (nw * scale)]
+    image = image.unsqueeze(0)
+    lr = F.interpolate(image, scale_factor=1.0 / scale, mode="bicubic", align_corners=False)
+    return lr.squeeze(0).clamp(0.0, 1.0)
+
+
+class DF2KDataset(Dataset):
+    """DIV2K/DF2K-style HR dataset with on-the-fly LR generation and random patches for training."""
+
+    def __init__(self, hr_dir: Path, scale: int, lr_patch_size: int | None = None) -> None:
+        self.hr_dir = Path(hr_dir)
+        self.scale = int(scale)
+        self.lr_patch_size = lr_patch_size
+
+        if not self.hr_dir.exists():
+            raise FileNotFoundError(f"HR directory not found: {self.hr_dir}")
+
+        self.hr_images = sorted([p for p in self.hr_dir.rglob("*") if p.is_file() and _is_image_file(p)])
+        if len(self.hr_images) == 0:
+            raise RuntimeError(f"No images found in {self.hr_dir}")
+
+    def __len__(self) -> int:
+        return len(self.hr_images)
+
+    def _random_crop_hr(self, hr: torch.Tensor) -> torch.Tensor:
+        if self.lr_patch_size is None:
+            return hr
+        hr_patch = self.lr_patch_size * self.scale
+        _, h, w = hr.shape
+        if h < hr_patch or w < hr_patch:
+            # Center crop to the largest multiple of scale possible
+            h_new = (h // self.scale) * self.scale
+            w_new = (w // self.scale) * self.scale
+            top = max(0, (h - h_new) // 2)
+            left = max(0, (w - w_new) // 2)
+            return hr[:, top : top + h_new, left : left + w_new]
+
+        top = random.randint(0, h - hr_patch)
+        left = random.randint(0, w - hr_patch)
+        return hr[:, top : top + hr_patch, left : left + hr_patch]
+
+    def __getitem__(self, idx: int) -> dict:
+        hr_path = self.hr_images[idx]
+        hr = _load_image_as_tensor(hr_path)
+        hr = self._random_crop_hr(hr)
+        
+        # Data augmentation for training
+        if self.lr_patch_size is not None:  # Training mode
+            # Random horizontal flip
+            if random.random() > 0.5:
+                hr = hflip(hr)
+            # Random vertical flip
+            if random.random() > 0.5:
+                hr = vflip(hr)
+            # Random 90-degree rotation
+            if random.random() > 0.5:
+                hr = torch.rot90(hr, k=random.randint(1, 3), dims=[-2, -1])
+        
+        lr = _bicubic_downsample(hr, self.scale)
+        return {"lr": lr, "hr": hr}
+
+
+class EvalImageFolder(Dataset):
+    """Evaluation dataset that loads HR images and generates LR by bicubic downsampling."""
+
+    def __init__(self, hr_dir: Path, scale: int) -> None:
+        self.hr_dir = Path(hr_dir)
+        self.scale = int(scale)
+        if not self.hr_dir.exists():
+            raise FileNotFoundError(f"HR directory not found: {self.hr_dir}")
+        self.hr_images = sorted([p for p in self.hr_dir.rglob("*") if p.is_file() and _is_image_file(p)])
+        if len(self.hr_images) == 0:
+            raise RuntimeError(f"No images found in {self.hr_dir}")
+
+    def __len__(self) -> int:
+        return len(self.hr_images)
+
+    def __getitem__(self, idx: int) -> dict:
+        hr_path = self.hr_images[idx]
+        hr = _load_image_as_tensor(hr_path)
+        # Ensure dimensions are multiples of scale for clean downsampling
+        c, h, w = hr.shape
+        h_new = (h // self.scale) * self.scale
+        w_new = (w // self.scale) * self.scale
+        hr = hr[:, :h_new, :w_new]
+        lr = _bicubic_downsample(hr, self.scale)
+        return {"lr": lr, "hr": hr}
+
+
+def _resolve_default_dirs(data_root: str | Path) -> Tuple[Path, Path]:
+    root = Path(data_root)
+    # Common layouts
+    candidates = [
+        (root / "DIV2K_train_HR", root / "DIV2K_valid_HR"),
+        (root / "train" / "HR", root / "val" / "HR"),
+        (root / "HR" / "train", root / "HR" / "val"),
+    ]
+    for tr, va in candidates:
+        if tr.exists() and va.exists():
+            return tr, va
+    # If root itself is an HR dir, use it for both (fallback)
+    return root, root
+
+
+def create_dataloaders(
+    data_root: str | Path,
+    scale: int,
+    batch_size: int,
+    lr_patch_size: int | None = None,
+    num_workers: int = 4,
+) -> tuple[DataLoader, DataLoader]:
+    """Create train/val dataloaders for SR training.
+
+    Expects one of the following layouts under data_root:
+      - DIV2K_train_HR / DIV2K_valid_HR
+      - train/HR / val/HR
+      - HR/train / HR/val
+    """
+    train_hr_dir, val_hr_dir = _resolve_default_dirs(data_root)
+
+    train_ds = DF2KDataset(train_hr_dir, scale=scale, lr_patch_size=lr_patch_size)
+    val_ds = DF2KDataset(val_hr_dir, scale=scale, lr_patch_size=None)
+
+    train_loader = DataLoader(
+        train_ds,
+        batch_size=batch_size,
+        shuffle=True,
+        num_workers=num_workers,
+        pin_memory=True,
+        drop_last=True,
     )
-    
-    # Create student model
-    student = MambaLiteSR(
-        scale=SCALE,
-        embed_dim=EMBED_DIM,
-        num_rmmb=NUM_RMMB,
-        mixers_per_block=MIXERS_PER_BLOCK,
-        low_rank=LOW_RANK,
-    ).to(device)
-    
-    # Create teacher model (if using knowledge distillation)
-    teacher = None
-    if USE_KD:
-        teacher = MambaLiteSR(
-            scale=SCALE,
-            embed_dim=EMBED_DIM * 2,  # Teacher typically larger
-            num_rmmb=NUM_RMMB * 2,
-            mixers_per_block=MIXERS_PER_BLOCK,
-            low_rank=LOW_RANK,
-        ).to(device)
-        teacher.eval()
-        for p in teacher.parameters():
-            p.requires_grad_(False)
-        if TEACHER_CKPT:
-            load_checkpoint(teacher, Path(TEACHER_CKPT), map_location=device)
-    
-    # Loss, optimizer, and scheduler
-    criterion = DistillationLoss(alpha=ALPHA)
-    optimizer = optim.Adam(student.parameters(), lr=LR, weight_decay=WEIGHT_DECAY)
-    scheduler = optim.lr_scheduler.MultiStepLR(
-        optimizer, milestones=list(MILESTONES), gamma=GAMMA
-    )
-    
-    # Output directory setup
-    out_dir = Path(OUT_DIR)
-    out_dir.mkdir(parents=True, exist_ok=True)
-    
-    # Training loop
-    best_psnr = 0.0
-    global_step = 0
-    
-    for epoch in range(1, EPOCHS + 1):
-        student.train()
-        pbar = tqdm(train_loader, desc=f"Epoch {epoch}/{EPOCHS}")
-        
-        for batch in pbar:
-            lr = batch["lr"].to(device, non_blocking=True)
-            hr = batch["hr"].to(device, non_blocking=True)
-            
-            with torch.set_grad_enabled(True):
-                # Teacher forward (if using distillation)
-                if teacher is not None:
-                    with torch.no_grad():
-                        teacher_sr = teacher(lr)
-                else:
-                    teacher_sr = None
-                
-                # Student forward
-                sr = student(lr)
-                
-                # Calculate loss
-                loss = criterion(sr, hr, teacher_sr=teacher_sr)
-                
-                # Backpropagation
-                optimizer.zero_grad(set_to_none=True)
-                loss.backward()
-                nn.utils.clip_grad_norm_(student.parameters(), max_norm=1.0)
-                optimizer.step()
-            
-            global_step += 1
-            pbar.set_postfix({
-                "loss": f"{loss.item():.4f}", 
-                "lr": f"{scheduler.get_last_lr()[0]:.2e}"
-            })
-        
-        # Update learning rate
-        scheduler.step()
-        
-        # Validation
-        val_psnr, val_ssim = evaluate(student, val_loader, device)
-        print(f"Validation PSNR-Y: {val_psnr:.3f} dB | SSIM-Y: {val_ssim:.4f}")
-        
-        # Save checkpoints
-        if val_psnr > best_psnr:
-            best_psnr = val_psnr
-            save_checkpoint(
-                student, optimizer, global_step, 
-                out_dir / "best.pt"
-            )
-        save_checkpoint(
-            student, optimizer, global_step, 
-            out_dir / "last.pt"
-        )
 
-if __name__ == "__main__":
-    main()
+    val_loader = DataLoader(
+        val_ds,
+        batch_size=1,
+        shuffle=False,
+        num_workers=max(1, num_workers // 2),
+        pin_memory=True,
+    )
+
+    return train_loader, val_loader
+
+
+__all__ = ["DF2KDataset", "EvalImageFolder", "create_dataloaders"]

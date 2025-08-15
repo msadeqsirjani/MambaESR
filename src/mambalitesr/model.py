@@ -19,7 +19,7 @@ class MambaLiteSR(nn.Module):
             ) for _ in range(num_rmmb)
         ])
         
-        # Feature fusion
+        # Feature fusion with residual connection
         self.body_fuse = nn.Conv2d(embed_dim, embed_dim, kernel_size=3, padding=1)
         
         # Upsampling
@@ -27,6 +27,9 @@ class MambaLiteSR(nn.Module):
         
         # Reconstruction
         self.tail = nn.Conv2d(embed_dim, 3, kernel_size=3, padding=1)
+        
+        # Initialize weights
+        self._initialize_weights()
     
     def forward(self, x, return_features=False):
         features = []
@@ -48,3 +51,15 @@ class MambaLiteSR(nn.Module):
         if return_features:
             return out, features
         return out
+    
+    def _initialize_weights(self):
+        """Initialize network weights"""
+        for m in self.modules():
+            if isinstance(m, nn.Conv2d):
+                nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
+                if m.bias is not None:
+                    nn.init.constant_(m.bias, 0)
+            elif isinstance(m, nn.Linear):
+                nn.init.normal_(m.weight, 0, 0.01)
+                if m.bias is not None:
+                    nn.init.constant_(m.bias, 0)

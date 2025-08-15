@@ -3,33 +3,107 @@ import numpy as np
 from PIL import Image
 from torchvision.transforms.functional import to_pil_image
 try:
-    from piq import psnr, ssim, fid, lpips
+    from piq import psnr as piq_psnr, ssim as piq_ssim, fid as piq_fid, lpips as piq_lpips
+    PIQ_AVAILABLE = True
 except ImportError:
-    # Fallback implementations if piq is not available
-    def psnr(*args, **kwargs):
-        return torch.tensor(30.0)  # Dummy value
-    def ssim(*args, **kwargs):
-        return torch.tensor(0.9)   # Dummy value
-    def fid(*args, **kwargs):
-        return torch.tensor(50.0)  # Dummy value
-    def lpips(*args, **kwargs):
-        return torch.tensor(0.2)   # Dummy value
+    PIQ_AVAILABLE = False
+    print("Warning: piq not installed. Install with 'pip install piq' for real metrics.")
+
+def _psnr_manual(sr: torch.Tensor, hr: torch.Tensor, data_range: float = 1.0) -> torch.Tensor:
+    """Manual PSNR calculation as fallback"""
+    mse = torch.mean((sr - hr) ** 2)
+    if mse == 0:
+        return torch.tensor(100.0)
+    return 20 * torch.log10(data_range / torch.sqrt(mse))
+
+def _ssim_manual(sr: torch.Tensor, hr: torch.Tensor, data_range: float = 1.0) -> torch.Tensor:
+    """Simplified SSIM calculation as fallback"""
+    # Very basic approximation - not accurate but better than dummy values
+    mu1 = torch.mean(sr)
+    mu2 = torch.mean(hr)
+    sigma1_sq = torch.var(sr)
+    sigma2_sq = torch.var(hr)
+    sigma12 = torch.mean((sr - mu1) * (hr - mu2))
+    
+    c1 = (0.01 * data_range) ** 2
+    c2 = (0.03 * data_range) ** 2
+    
+    numerator = (2 * mu1 * mu2 + c1) * (2 * sigma12 + c2)
+    denominator = (mu1**2 + mu2**2 + c1) * (sigma1_sq + sigma2_sq + c2)
+    
+    return numerator / denominator
 
 def calculate_psnr(sr, hr, data_range=1.0):
     """Calculate PSNR in [0,1] range"""
-    return psnr(sr, hr, data_range=data_range).item()
+    if PIQ_AVAILABLE:
+        return piq_psnr(sr, hr, data_range=data_range).item()
+    else:
+        return _psnr_manual(sr, hr, data_range).item()
 
 def calculate_ssim(sr, hr, data_range=1.0):
     """Calculate SSIM in [0,1] range"""
-    return ssim(sr, hr, data_range=data_range).item()
+    if PIQ_AVAILABLE:
+        return piq_ssim(sr, hr, data_range=data_range).item()
+    else:
+        return _ssim_manual(sr, hr, data_range).item()
 
 def calculate_lpips(sr, hr):
     """Calculate LPIPS (perceptual similarity)"""
-    return lpips(sr, hr, reduction='mean').item()
+    if PIQ_AVAILABLE:
+        return piq_lpips(sr, hr, reduction='mean').item()
+    else:
+        # Fallback: use L2 distance as rough perceptual proxy
+        return torch.mean((sr - hr) ** 2).item()
 
 def calculate_fid(sr, hr):
     """Calculate FID (requires batch of images)"""
-    return fid(sr, hr).item()
+    if PIQ_AVAILABLE:
+        return piq_fid(sr, hr).item()
+    else:
+        # Fallback: use feature distance approximation
+        sr_flat = sr.flatten(1).mean(1)
+        hr_flat = hr.flatten(1).mean(1)
+        return torch.mean((sr_flat - hr_flat) ** 2).item() * 100
+
+
+def _rgb_to_y(t: torch.Tensor) -> torch.Tensor:
+    """Convert RGB tensor in [0,1] to Y (luma) channel using BT.601 coefficients.
+
+    Accepts (B,3,H,W) or (3,H,W). Returns (B,1,H,W) or (1,H,W) respectively.
+    """
+    if t.dim() == 3:
+        # (C,H,W)
+        r, g, b = t[0:1], t[1:2], t[2:3]
+        y = 0.299 * r + 0.587 * g + 0.114 * b
+        return y
+    elif t.dim() == 4:
+        # (B,C,H,W)
+        r, g, b = t[:, 0:1], t[:, 1:2], t[:, 2:3]
+        y = 0.299 * r + 0.587 * g + 0.114 * b
+        return y
+    else:
+        raise ValueError("Expected tensor with 3 or 4 dims (C,H,W) or (B,C,H,W)")
+
+
+def calculate_psnr_y(sr: torch.Tensor, hr: torch.Tensor, data_range: float = 1.0) -> float:
+    """PSNR on Y channel in [0,1]. Accepts (B,3,H,W) or (3,H,W)."""
+    y_sr = _rgb_to_y(sr)
+    y_hr = _rgb_to_y(hr)
+    # Ensure shapes match piq expected channel dimension
+    if y_sr.dim() == 3:
+        y_sr = y_sr.unsqueeze(0)
+        y_hr = y_hr.unsqueeze(0)
+    return psnr(y_sr, y_hr, data_range=data_range).item()
+
+
+def calculate_ssim_y(sr: torch.Tensor, hr: torch.Tensor, data_range: float = 1.0) -> float:
+    """SSIM on Y channel in [0,1]. Accepts (B,3,H,W) or (3,H,W)."""
+    y_sr = _rgb_to_y(sr)
+    y_hr = _rgb_to_y(hr)
+    if y_sr.dim() == 3:
+        y_sr = y_sr.unsqueeze(0)
+        y_hr = y_hr.unsqueeze(0)
+    return ssim(y_sr, y_hr, data_range=data_range).item()
 
 def save_comparison(lr, sr, hr, path):
     """Save visual comparison of LR, SR, and HR images"""

@@ -20,8 +20,8 @@ from src.mambalitesr.data import create_dataloaders
 from src.mambalitesr.model import MambaLiteSR
 from src.mambalitesr.losses import FeatureDistillationLoss
 from src.mambalitesr.utils import (
-    calculate_psnr, calculate_ssim, calculate_lpips, calculate_fid,
-    save_comparison, save_checkpoint, load_checkpoint
+    calculate_psnr, calculate_ssim, calculate_lpips,
+    save_checkpoint
 )
 from src.mambalitesr.experiment_manager import ExperimentManager
 
@@ -34,8 +34,6 @@ def evaluate(model: nn.Module,
     """Comprehensive model evaluation with metrics and visual samples"""
     model.eval()
     psnrs, ssims, lpips_scores = [], [], []
-    all_sr, all_hr = [], []
-    eval_size = (256, 256)  # H, W fixed spatial size for FID compatibility
     
     with torch.inference_mode():
         for i, batch in enumerate(tqdm(val_loader, desc="Validating")):
@@ -48,29 +46,12 @@ def evaluate(model: nn.Module,
             ssims.append(calculate_ssim(sr, hr))
             lpips_scores.append(calculate_lpips(sr, hr))
             
-            # Collect resized samples for FID (must have consistent spatial size)
-            sr_resized = F.interpolate(sr, size=eval_size, mode='bilinear', align_corners=False)
-            hr_resized = F.interpolate(hr, size=eval_size, mode='bilinear', align_corners=False)
-            all_sr.append(sr_resized.cpu())
-            all_hr.append(hr_resized.cpu())
             
-            # Save visual comparisons
-            if i < 3:
-                save_comparison(
-                    lr, sr, hr,
-                    out_dir / f"compare_epoch{epoch}_sample{i}.png"
-                )
-    
-    # Calculate FID (requires all samples)
-    sr_tensor = torch.cat(all_sr, dim=0).to(device)
-    hr_tensor = torch.cat(all_hr, dim=0).to(device)
-    fid_score = calculate_fid(sr_tensor, hr_tensor)
     
     return {
         "psnr": np.mean(psnrs),
         "ssim": np.mean(ssims),
-        "lpips": np.mean(lpips_scores),
-        "fid": fid_score
+        "lpips": np.mean(lpips_scores)
     }
 
 
@@ -83,7 +64,7 @@ def main() -> None:
     print("Training TEACHER model (large, no KD)")
     
     # Create experiment manager for teacher
-    experiment = ExperimentManager(f"{cfg.experiment_name}_teacher")
+    experiment = ExperimentManager("teacher")
     out_dir = experiment.get_experiment_dir()
     
     # Save teacher configuration
@@ -105,7 +86,7 @@ def main() -> None:
         }
     }
     experiment.save_config(config_dict)
-    experiment.copy_code_snapshot()
+    
     
     writer = SummaryWriter(out_dir / "logs")
     
@@ -162,7 +143,7 @@ def main() -> None:
     )
     
     # Training state
-    best_psnr = 0.0
+    best_psnr = float('-inf')
     global_step = 0
     epochs_without_improvement = 0
     
@@ -204,15 +185,13 @@ def main() -> None:
         print(f"Teacher Epoch {epoch} | "
               f"PSNR: {metrics['psnr']:.2f} dB | "
               f"SSIM: {metrics['ssim']:.4f} | "
-              f"LPIPS: {metrics['lpips']:.4f} | "
-              f"FID: {metrics['fid']:.2f}")
+              f"LPIPS: {metrics['lpips']:.4f}")
         
         # TensorBoard logging
         writer.add_scalar('Loss/train', epoch_loss / len(train_loader), epoch)
         writer.add_scalar('PSNR', metrics['psnr'], epoch)
         writer.add_scalar('SSIM', metrics['ssim'], epoch)
         writer.add_scalar('LPIPS', metrics['lpips'], epoch)
-        writer.add_scalar('FID', metrics['fid'], epoch)
         writer.add_scalar('LR', scheduler.get_last_lr()[0], epoch)
         
         # Save best checkpoint and early stopping
@@ -226,28 +205,22 @@ def main() -> None:
                 out_dir / "best.pt"
             )
             print(f"Saved best teacher model with PSNR: {best_psnr:.2f} dB")
+            writer.add_text('checkpoint/best', str(out_dir / "best.pt"), epoch)
+            experiment.log_training_metric(epoch, {"best_checkpoint": str(out_dir / "best.pt")})
         else:
             epochs_without_improvement += 1
             if epochs_without_improvement >= cfg.early_stop_patience:
                 print(f"Early stopping after {epoch} epochs (no improvement for {cfg.early_stop_patience} epochs)")
                 break
         
-        # Save checkpoint periodically
-        if epoch % cfg.save_freq == 0:
-            save_checkpoint(
-                teacher, 
-                optimizer, 
-                global_step, 
-                out_dir / f"checkpoint_epoch_{epoch}.pt"
-            )
-        
         # Always save latest
         save_checkpoint(
             teacher, 
             optimizer, 
             global_step, 
-            out_dir / "last.pt"
+            out_dir / "latest.pt"
         )
+        writer.add_text('checkpoint/latest', str(out_dir / "latest.pt"), epoch)
     
     print("Teacher training completed!")
     print(f"Best teacher PSNR: {best_psnr:.2f} dB")

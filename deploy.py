@@ -27,7 +27,7 @@ if __name__ == "__main__":
     
     # Load trained model
     model = MambaLiteSR(scale=4).to(device)
-    model.load_state_dict(torch.load("runs/experiment1/best.pt"))
+    model.load_state_dict(torch.load("runs/latest/student/best.pt"))
     model.eval()
     
     # Export formats

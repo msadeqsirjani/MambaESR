@@ -14,40 +14,26 @@ from typing import Dict, Any, Optional
 class ExperimentManager:
     """Manages experiment directories and metrics tracking"""
     
-    def __init__(self, base_name: str = "mambalitesr", base_dir: str = "runs"):
+    def __init__(self, base_name: str = "mambalitesr", base_dir: str = "runs/latest"):
         self.base_name = base_name
         self.base_dir = Path(base_dir)
-        self.base_dir.mkdir(exist_ok=True)
+        self.base_dir.mkdir(parents=True, exist_ok=True)
         
-        # Create timestamped experiment directory
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        self.experiment_dir = self.base_dir / f"{base_name}_{timestamp}"
+        # Single root 'runs/latest' with a subdirectory per experiment base name (e.g., 'student', 'teacher')
+        self.experiment_dir = self.base_dir / base_name
         self.experiment_dir.mkdir(parents=True, exist_ok=True)
-        
-        # Update latest symlink
-        latest_link = self.base_dir / "latest"
-        if latest_link.exists():
-            if latest_link.is_symlink():
-                latest_link.unlink()
-            elif latest_link.is_dir():
-                import shutil
-                shutil.rmtree(latest_link)
-            else:
-                latest_link.unlink()
-        latest_link.symlink_to(self.experiment_dir.name)
         
         # Initialize metrics file
         self.metrics_file = self.experiment_dir / "metrics.json"
         self.metrics = {
             "experiment_name": base_name,
-            "timestamp": timestamp,
             "training": {},
             "evaluation": {},
             "config": {}
         }
         self._save_metrics()
         
-        print(f"🔬 Experiment: {self.experiment_dir}")
+        print(f"🔬 Experiment dir: {self.experiment_dir}")
         print(f"📊 Metrics: {self.metrics_file}")
     
     def get_experiment_dir(self) -> Path:
@@ -129,22 +115,13 @@ class ExperimentManager:
         subdir.mkdir(exist_ok=True)
         return subdir
     
-    def copy_code_snapshot(self, source_dir: str = "src") -> None:
-        """Copy source code snapshot to experiment directory"""
-        source_path = Path(source_dir)
-        if source_path.exists():
-            dest_path = self.experiment_dir / "code_snapshot"
-            if dest_path.exists():
-                shutil.rmtree(dest_path)
-            shutil.copytree(source_path, dest_path)
-            print(f"📁 Code snapshot saved to {dest_path}")
+    
 
-
-def get_latest_experiment_dir(base_dir: str = "runs") -> Optional[Path]:
-    """Get the latest experiment directory"""
-    latest_link = Path(base_dir) / "latest"
-    if latest_link.exists() and latest_link.is_symlink():
-        return Path(base_dir) / latest_link.readlink()
+def get_latest_experiment_dir(base_dir: str = "runs/latest") -> Optional[Path]:
+    """Get the single experiment root directory (runs/latest)"""
+    latest_dir = Path(base_dir)
+    if latest_dir.exists() and latest_dir.is_dir():
+        return latest_dir
     return None
 
 
@@ -157,32 +134,16 @@ def load_metrics(experiment_dir: Path) -> Optional[Dict[str, Any]]:
     return None
 
 
-def find_latest_teacher_checkpoint(base_dir: str = "runs") -> Optional[Path]:
-    """Find the latest teacher checkpoint automatically"""
-    runs_path = Path(base_dir)
-    if not runs_path.exists():
+def find_latest_teacher_checkpoint(base_dir: str = "runs/latest") -> Optional[Path]:
+    """Find the teacher checkpoint under runs/latest/teacher (prefer best.pt then last.pt)."""
+    root = get_latest_experiment_dir(base_dir)
+    if root is None:
         return None
-    
-    # Find all teacher experiment directories
-    teacher_dirs = []
-    for exp_dir in runs_path.iterdir():
-        if exp_dir.is_dir() and "teacher" in exp_dir.name:
-            teacher_dirs.append(exp_dir)
-    
-    if not teacher_dirs:
-        return None
-    
-    # Sort by modification time (most recent first)
-    teacher_dirs.sort(key=lambda x: x.stat().st_mtime, reverse=True)
-    
-    # Look for best.pt in the most recent teacher directory
-    for teacher_dir in teacher_dirs:
-        best_checkpoint = teacher_dir / "best.pt"
-        if best_checkpoint.exists():
-            return best_checkpoint
-        # Fallback to last.pt if best.pt doesn't exist
-        last_checkpoint = teacher_dir / "last.pt"
-        if last_checkpoint.exists():
-            return last_checkpoint
-    
+    teacher_dir = root / "teacher"
+    best_checkpoint = teacher_dir / "best.pt"
+    if best_checkpoint.exists():
+        return best_checkpoint
+    last_checkpoint = teacher_dir / "last.pt"
+    if last_checkpoint.exists():
+        return last_checkpoint
     return None

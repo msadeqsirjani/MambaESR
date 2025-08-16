@@ -155,3 +155,34 @@ def load_metrics(experiment_dir: Path) -> Optional[Dict[str, Any]]:
         with open(metrics_file, 'r') as f:
             return json.load(f)
     return None
+
+
+def find_latest_teacher_checkpoint(base_dir: str = "runs") -> Optional[Path]:
+    """Find the latest teacher checkpoint automatically"""
+    runs_path = Path(base_dir)
+    if not runs_path.exists():
+        return None
+    
+    # Find all teacher experiment directories
+    teacher_dirs = []
+    for exp_dir in runs_path.iterdir():
+        if exp_dir.is_dir() and "teacher" in exp_dir.name:
+            teacher_dirs.append(exp_dir)
+    
+    if not teacher_dirs:
+        return None
+    
+    # Sort by modification time (most recent first)
+    teacher_dirs.sort(key=lambda x: x.stat().st_mtime, reverse=True)
+    
+    # Look for best.pt in the most recent teacher directory
+    for teacher_dir in teacher_dirs:
+        best_checkpoint = teacher_dir / "best.pt"
+        if best_checkpoint.exists():
+            return best_checkpoint
+        # Fallback to last.pt if best.pt doesn't exist
+        last_checkpoint = teacher_dir / "last.pt"
+        if last_checkpoint.exists():
+            return last_checkpoint
+    
+    return None

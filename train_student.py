@@ -18,7 +18,7 @@ from src.mambalitesr.utils import (
     calculate_psnr, calculate_ssim, calculate_lpips, calculate_fid,
     save_comparison, save_checkpoint, load_checkpoint
 )
-from src.mambalitesr.experiment_manager import ExperimentManager
+from src.mambalitesr.experiment_manager import ExperimentManager, find_latest_teacher_checkpoint
 
 def evaluate(model: nn.Module, 
             val_loader: DataLoader, 
@@ -140,9 +140,18 @@ def main() -> None:
             p.requires_grad_(False)
         print(f"Teacher parameters: {sum(p.numel() for p in teacher.parameters()):,}")
         
-        if tcfg.ckpt:
+        # Auto-find latest teacher checkpoint
+        teacher_checkpoint = find_latest_teacher_checkpoint()
+        
+        if teacher_checkpoint:
+            load_checkpoint(teacher, teacher_checkpoint, map_location=device)
+            print(f"✅ Loaded teacher weights from {teacher_checkpoint}")
+        elif tcfg.ckpt and Path(tcfg.ckpt).exists():
             load_checkpoint(teacher, Path(tcfg.ckpt), map_location=device)
-            print(f"Loaded teacher weights from {tcfg.ckpt}")
+            print(f"✅ Loaded teacher weights from {tcfg.ckpt}")
+        else:
+            print("⚠️  No teacher checkpoint found - training with random teacher weights")
+            print("   This will significantly reduce performance!")
     
     # Create discriminator (if using adversarial training)
     discriminator = None

@@ -51,8 +51,8 @@ class TeacherConfig:
     num_rmmb: int = 12     # 1.5x student blocks
     mixers_per_block: int = 2
     low_rank: int = 16     # Higher rank
-    # Optional checkpoint to load a pretrained teacher
-    ckpt: str | None = "runs/teacher/best.pt"  # Will be available after teacher training
+    # Optional checkpoint to load a pretrained teacher (auto-finds latest if this path doesn't exist)
+    ckpt: str | None = "runs/teacher/best.pt"  # Fallback path - will auto-find latest teacher
 
 
 @dataclass(frozen=True)

@@ -47,8 +47,8 @@ def main() -> None:
     cfg = CONFIG
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     
-    # Create evaluation experiment manager
-    experiment = ExperimentManager(f"{cfg.experiment_name}_evaluation")
+    # Create evaluation experiment manager under runs/latest/evaluation
+    experiment = ExperimentManager("evaluation")
     
     # Load model
     model = MambaLiteSR(
@@ -59,14 +59,17 @@ def main() -> None:
         low_rank=cfg.low_rank,
     ).to(device)
     
-    # Try to find the latest student experiment
-    latest_exp_dir = get_latest_experiment_dir()
-    if latest_exp_dir and (latest_exp_dir / "best.pt").exists():
-        checkpoint_path = latest_exp_dir / "best.pt"
-    else:
-        checkpoint_path = Path("runs/latest/best.pt")
-    
-    if checkpoint_path.exists():
+    # Try to find the latest student experiment under runs/latest
+    latest_root = get_latest_experiment_dir()
+    checkpoint_path = None
+    if latest_root and latest_root.exists():
+        student_dir = latest_root / "student"
+        if (student_dir / "best.pt").exists():
+            checkpoint_path = student_dir / "best.pt"
+        elif (student_dir / "last.pt").exists():
+            checkpoint_path = student_dir / "last.pt"
+
+    if checkpoint_path and checkpoint_path.exists():
         load_checkpoint(model, checkpoint_path, map_location=device)
         print(f"Loaded model from {checkpoint_path}")
     else:

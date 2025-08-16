@@ -39,7 +39,7 @@ class TrainConfig:
     early_stop_patience: int = 50  # Early stopping
     save_freq: int = 10  # Save checkpoint every N epochs
     log_freq: int = 100  # Log every N steps
-    # Output (will be auto-versioned with timestamp)
+    # Output root
     out_dir: str = "runs/latest"
     experiment_name: str = "mambalitesr"  # Base name for experiments
 
@@ -52,12 +52,12 @@ class TeacherConfig:
     mixers_per_block: int = 2
     low_rank: int = 16     # Higher rank
     # Optional checkpoint to load a pretrained teacher (auto-finds latest if this path doesn't exist)
-    ckpt: str | None = "runs/teacher/best.pt"  # Fallback path - will auto-find latest teacher
+    ckpt: str | None = "runs/latest/teacher/best.pt"  # Fallback path - will auto-find latest teacher
 
 
 @dataclass(frozen=True)
 class EvalConfig:
-    ckpt: str = "runs/latest/best.pt"
+    ckpt: str = "runs/latest/student/best.pt"
     eval_set: str = "Set5"  # One of: Set5, Set14, BSD100, Urban100
 
 

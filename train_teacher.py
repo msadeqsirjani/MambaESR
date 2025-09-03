@@ -15,17 +15,17 @@ from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
 
-from src.mambalitesr.config import CONFIG, TEACHER
-from src.mambalitesr.data import create_dataloaders
-from src.mambalitesr.model import MambaLiteSR
-from src.mambalitesr.losses import FeatureDistillationLoss
-from src.mambalitesr.utils import (
+from src.config import CONFIG, TEACHER
+from src.data import create_dataloaders
+from src.model import MambaLiteSR
+from src.losses import FeatureDistillationLoss
+from src.utils import (
     calculate_psnr,
     calculate_ssim,
     calculate_lpips,
     save_checkpoint,
 )
-from src.mambalitesr.experiment_manager import ExperimentManager
+from src.experiment_manager import ExperimentManager
 
 
 def evaluate(

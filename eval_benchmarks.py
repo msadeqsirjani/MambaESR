@@ -11,7 +11,7 @@ from tqdm import tqdm
 
 from src.config import CONFIG
 from src.data import EvalImageFolder
-from src.model import MambaLiteSR
+from src.model import MambaESR
 from src.utils import calculate_psnr_y, calculate_ssim_y, load_checkpoint
 from src.experiment_manager import (
     ExperimentManager,
@@ -56,7 +56,7 @@ def main() -> None:
     experiment = ExperimentManager("evaluation")
 
     # Load model
-    model = MambaLiteSR(
+    model = MambaESR(
         scale=cfg.scale,
         embed_dim=cfg.embed_dim,
         num_rmmb=cfg.num_rmmb,

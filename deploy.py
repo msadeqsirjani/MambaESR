@@ -1,6 +1,6 @@
 import torch
 from torch.utils.mobile_optimizer import optimize_for_mobile
-from src.model import MambaLiteSR
+from src.model import MambaESR
 
 
 def export_to_onnx(model, output_path, size=(256, 256)):
@@ -29,12 +29,12 @@ if __name__ == "__main__":
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # Load trained model
-    model = MambaLiteSR(scale=4).to(device)
+    model = MambaESR(scale=4).to(device)
     model.load_state_dict(torch.load("runs/latest/student/best.pt"))
     model.eval()
 
     # Export formats
-    export_to_onnx(model, "mambalitesr.onnx")
-    export_to_torchscript(model, "mambalitesr.ptl")
+    export_to_onnx(model, "mambaesr.onnx")
+    export_to_torchscript(model, "mambaesr.ptl")
 
     print("Models exported successfully!")

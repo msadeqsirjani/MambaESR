@@ -9,19 +9,19 @@ import torch.nn.functional as F
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
-from src.mambalitesr.config import CONFIG, TEACHER
-from src.mambalitesr.data import create_dataloaders
-from src.mambalitesr.model import MambaLiteSR
-from src.mambalitesr.losses import FeatureDistillationLoss
-from src.mambalitesr.discriminator import PatchDiscriminator
-from src.mambalitesr.utils import (
+from src.config import CONFIG, TEACHER
+from src.data import create_dataloaders
+from src.model import MambaLiteSR
+from src.losses import FeatureDistillationLoss
+from src.discriminator import PatchDiscriminator
+from src.utils import (
     calculate_psnr,
     calculate_ssim,
     calculate_lpips,
     save_checkpoint,
     load_checkpoint,
 )
-from src.mambalitesr.experiment_manager import (
+from src.experiment_manager import (
     ExperimentManager,
     find_latest_teacher_checkpoint,
 )

@@ -61,7 +61,7 @@ def main() -> None:
     cfg = CONFIG
     tcfg = TEACHER
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    scaler = torch.amp.GradScaler("cuda", enabled=(device.type == "cuda"))
+    scaler = torch.cuda.amp.GradScaler(enabled=(device.type == "cuda"))
     print(f"Using device: {device}")
     print("Training TEACHER model (large, no KD)")
 

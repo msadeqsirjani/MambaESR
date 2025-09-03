@@ -32,14 +32,18 @@ def _bicubic_downsample(image: torch.Tensor, scale: int) -> torch.Tensor:
     nw = (w // scale) * 1
     image = image[:, : (nh * scale), : (nw * scale)]
     image = image.unsqueeze(0)
-    lr = F.interpolate(image, scale_factor=1.0 / scale, mode="bicubic", align_corners=False)
+    lr = F.interpolate(
+        image, scale_factor=1.0 / scale, mode="bicubic", align_corners=False
+    )
     return lr.squeeze(0).clamp(0.0, 1.0)
 
 
 class DF2KDataset(Dataset):
     """DIV2K/DF2K-style HR dataset with on-the-fly LR generation and random patches for training."""
 
-    def __init__(self, hr_dir: Path, scale: int, lr_patch_size: int | None = None) -> None:
+    def __init__(
+        self, hr_dir: Path, scale: int, lr_patch_size: int | None = None
+    ) -> None:
         self.hr_dir = Path(hr_dir)
         self.scale = int(scale)
         self.lr_patch_size = lr_patch_size
@@ -47,7 +51,9 @@ class DF2KDataset(Dataset):
         if not self.hr_dir.exists():
             raise FileNotFoundError(f"HR directory not found: {self.hr_dir}")
 
-        self.hr_images = sorted([p for p in self.hr_dir.rglob("*") if p.is_file() and _is_image_file(p)])
+        self.hr_images = sorted(
+            [p for p in self.hr_dir.rglob("*") if p.is_file() and _is_image_file(p)]
+        )
         if len(self.hr_images) == 0:
             raise RuntimeError(f"No images found in {self.hr_dir}")
 
@@ -75,7 +81,7 @@ class DF2KDataset(Dataset):
         hr_path = self.hr_images[idx]
         hr = _load_image_as_tensor(hr_path)
         hr = self._random_crop_hr(hr)
-        
+
         # Data augmentation for training
         if self.lr_patch_size is not None:  # Training mode
             # Random horizontal flip
@@ -87,7 +93,7 @@ class DF2KDataset(Dataset):
             # Random 90-degree rotation
             if random.random() > 0.5:
                 hr = torch.rot90(hr, k=random.randint(1, 3), dims=[-2, -1])
-        
+
         lr = _bicubic_downsample(hr, self.scale)
         return {"lr": lr, "hr": hr}
 
@@ -100,7 +106,9 @@ class EvalImageFolder(Dataset):
         self.scale = int(scale)
         if not self.hr_dir.exists():
             raise FileNotFoundError(f"HR directory not found: {self.hr_dir}")
-        self.hr_images = sorted([p for p in self.hr_dir.rglob("*") if p.is_file() and _is_image_file(p)])
+        self.hr_images = sorted(
+            [p for p in self.hr_dir.rglob("*") if p.is_file() and _is_image_file(p)]
+        )
         if len(self.hr_images) == 0:
             raise RuntimeError(f"No images found in {self.hr_dir}")
 

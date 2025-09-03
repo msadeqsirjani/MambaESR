@@ -28,8 +28,6 @@ def run_command(cmd: str, description: str) -> bool:
 
 def main():
     """Complete training pipeline"""
-    print("🚀 MAMBAESR BASELINE REPRODUCTION PIPELINE")
-    print("Goal: Match baseline PSNR of 28.28 dB on Set5")
 
     # Step 1: Train teacher model
     print("\n📚 Training large teacher model (no knowledge distillation)")

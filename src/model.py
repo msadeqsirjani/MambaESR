@@ -6,7 +6,13 @@ from .blocks import ResidualMixedMambaBlock, PixelShuffleUpsampler
 
 class MambaESR(nn.Module):
     def __init__(
-        self, scale=4, embed_dim=32, num_rmmb=4, mixers_per_block=2, low_rank=4, use_gradient_checkpointing=False
+        self,
+        scale=4,
+        embed_dim=32,
+        num_rmmb=4,
+        mixers_per_block=2,
+        low_rank=4,
+        use_gradient_checkpointing=False,
     ):
         super().__init__()
         self.scale = scale

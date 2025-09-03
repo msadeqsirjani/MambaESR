@@ -14,7 +14,7 @@ from typing import Dict, Any, Optional
 class ExperimentManager:
     """Manages experiment directories and metrics tracking"""
 
-    def __init__(self, base_name: str = "mambalitesr", base_dir: str = "runs/latest"):
+    def __init__(self, base_name: str = "mambaesr", base_dir: str = "runs/latest"):
         self.base_name = base_name
         self.base_dir = Path(base_dir)
         self.base_dir.mkdir(parents=True, exist_ok=True)

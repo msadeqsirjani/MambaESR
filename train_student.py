@@ -11,7 +11,7 @@ from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
 from src.config import CONFIG, TEACHER
 from src.data import create_dataloaders
-from src.model import MambaLiteSR
+from src.model import MambaESR
 from src.losses import FeatureDistillationLoss
 from src.discriminator import PatchDiscriminator
 from src.utils import (
@@ -106,7 +106,7 @@ def main() -> None:
     )
 
     # Create student model
-    student = MambaLiteSR(
+    student = MambaESR(
         scale=cfg.scale,
         embed_dim=cfg.embed_dim,
         num_rmmb=cfg.num_rmmb,
@@ -118,7 +118,7 @@ def main() -> None:
     # Create teacher model (if using knowledge distillation)
     teacher = None
     if cfg.use_kd:
-        teacher = MambaLiteSR(
+        teacher = MambaESR(
             scale=cfg.scale,
             embed_dim=tcfg.embed_dim,
             num_rmmb=tcfg.num_rmmb,

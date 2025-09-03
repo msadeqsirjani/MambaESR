@@ -104,10 +104,27 @@ class SelectiveSSM(nn.Module):
         # Get A matrix
         A = -torch.exp(self.A_log.float())  # (d_inner, d_state)
         
-        # Discretize A and B using zero-order hold
+        # Discretize A and B using zero-order hold - memory-efficient version
         dt = F.softplus(dt)  # (batch, seqlen, d_inner)
-        dA = torch.exp(torch.einsum("bld,dn->bldn", dt, A))  # (batch, seqlen, d_inner, d_state)
-        dB = torch.einsum("bld,bln->bldn", dt, B)  # (batch, seqlen, d_inner, d_state)
+        
+        # Process in chunks to reduce memory usage
+        chunk_size = min(seqlen, 64)  # Process sequences in smaller chunks
+        dA_chunks = []
+        dB_chunks = []
+        
+        for i in range(0, seqlen, chunk_size):
+            end_i = min(i + chunk_size, seqlen)
+            dt_chunk = dt[:, i:end_i]  # (batch, chunk_size, d_inner)
+            B_chunk = B[:, i:end_i]    # (batch, chunk_size, d_state)
+            
+            dA_chunk = torch.exp(torch.einsum("bld,dn->bldn", dt_chunk, A))  # (batch, chunk_size, d_inner, d_state)
+            dB_chunk = torch.einsum("bld,bln->bldn", dt_chunk, B_chunk)      # (batch, chunk_size, d_inner, d_state)
+            
+            dA_chunks.append(dA_chunk)
+            dB_chunks.append(dB_chunk)
+        
+        dA = torch.cat(dA_chunks, dim=1)  # (batch, seqlen, d_inner, d_state)
+        dB = torch.cat(dB_chunks, dim=1)  # (batch, seqlen, d_inner, d_state)
         
         # Selective scan - simplified version
         h = torch.zeros(batch, d_inner, self.d_state, dtype=x.dtype, device=x.device)

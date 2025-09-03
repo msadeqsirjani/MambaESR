@@ -41,7 +41,7 @@ class TrainConfig:
     log_freq: int = 100  # Log every N steps
     # Output root
     out_dir: str = "runs/latest"
-    experiment_name: str = "mambalitesr"  # Base name for experiments
+    experiment_name: str = "mambaesr"  # Base name for experiments
 
 
 @dataclass(frozen=True)

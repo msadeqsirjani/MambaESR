@@ -1,15 +1,16 @@
 #!/usr/bin/env python
+import ssl
 import tarfile
 import zipfile
 from pathlib import Path
-from urllib.request import urlretrieve
+from urllib.request import urlretrieve, urlopen
 import shutil
 
 # ==========================
 # Hardcoded settings
 # ==========================
 ROOT = Path("data")
-SKIP_DIV2K = True  # You already have DIV2K; set to False to auto-download
+SKIP_DIV2K = False  # You already have DIV2K; set to False to auto-download
 DOWNLOAD_BENCHMARKS = True  # Download Set5/Set14/BSD100/Urban100 if missing
 POPULATE_DF2K_FROM_DIV2K = True  # Copy DIV2K_train_HR into DF2K/HR if DF2K/HR is empty
 
@@ -38,9 +39,19 @@ def ensure_dir(path: Path) -> None:
 
 def download_with_fallback(urls: list[str], dest_path: Path) -> None:
     last_err: Exception | None = None
+    
+    # Create SSL context that doesn't verify certificates
+    ssl_context = ssl.create_default_context()
+    ssl_context.check_hostname = False
+    ssl_context.verify_mode = ssl.CERT_NONE
+    
     for url in urls:
         try:
             print(f"Downloading: {url}")
+            # Use custom SSL context
+            import urllib.request
+            opener = urllib.request.build_opener(urllib.request.HTTPSHandler(context=ssl_context))
+            urllib.request.install_opener(opener)
             urlretrieve(url, dest_path)
             return
         except Exception as e:  # noqa: BLE001
@@ -123,6 +134,16 @@ def maybe_populate_df2k_from_div2k(root: Path) -> None:
 def main() -> None:
     root = ROOT
     ensure_dir(root)
+
+    # Create SSL context that doesn't verify certificates
+    ssl_context = ssl.create_default_context()
+    ssl_context.check_hostname = False
+    ssl_context.verify_mode = ssl.CERT_NONE
+    
+    # Install opener with custom SSL context
+    import urllib.request
+    opener = urllib.request.build_opener(urllib.request.HTTPSHandler(context=ssl_context))
+    urllib.request.install_opener(opener)
 
     # DIV2K Train/Valid HR
     if not SKIP_DIV2K:

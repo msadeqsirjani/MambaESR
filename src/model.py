@@ -1,14 +1,16 @@
 import torch
 import torch.nn as nn
+import torch.utils.checkpoint as checkpoint
 from .blocks import ResidualMixedMambaBlock, PixelShuffleUpsampler
 
 
-class MambaLiteSR(nn.Module):
+class MambaESR(nn.Module):
     def __init__(
-        self, scale=4, embed_dim=32, num_rmmb=4, mixers_per_block=2, low_rank=4
+        self, scale=4, embed_dim=32, num_rmmb=4, mixers_per_block=2, low_rank=4, use_gradient_checkpointing=False
     ):
         super().__init__()
         self.scale = scale
+        self.use_gradient_checkpointing = use_gradient_checkpointing
 
         # Shallow feature extraction
         self.head = nn.Conv2d(3, embed_dim, kernel_size=3, padding=1)
@@ -42,7 +44,10 @@ class MambaLiteSR(nn.Module):
 
         res = feat
         for block in self.body:
-            res = block(res)
+            if self.use_gradient_checkpointing and self.training:
+                res = checkpoint.checkpoint(block, res, use_reentrant=False)
+            else:
+                res = block(res)
             features.append(res)  # Capture block outputs
 
         res = self.body_fuse(res)

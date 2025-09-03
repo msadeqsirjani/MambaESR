@@ -45,7 +45,7 @@ def evaluate(
             hr = batch["hr"].to(device)
             sr = model(lr)
 
-            # Calculate metrics
+            # Calculate metrics (skip LPIPS due to SSL issues)
             psnrs.append(calculate_psnr(sr, hr))
             ssims.append(calculate_ssim(sr, hr))
             lpips_scores.append(calculate_lpips(sr, hr))
@@ -91,12 +91,11 @@ def main() -> None:
 
     writer = SummaryWriter(out_dir / "logs")
 
-    # Create dataloaders with reduced batch size for teacher (memory optimization)
-    teacher_batch_size = min(cfg.batch_size // 2, 16)  # Reduce batch size for teacher
+    # Create dataloaders with original batch size (simplified selective scan allows this)
     train_loader, val_loader = create_dataloaders(
         data_root=cfg.data_root,
         scale=cfg.scale,
-        batch_size=teacher_batch_size,
+        batch_size=cfg.batch_size,
         lr_patch_size=cfg.patch_size,
         num_workers=cfg.num_workers,
     )
@@ -104,14 +103,14 @@ def main() -> None:
         f"Training batches: {len(train_loader)}, Validation batches: {len(val_loader)}"
     )
 
-    # Create teacher model (large) with gradient checkpointing for memory efficiency
+    # Create teacher model (large)
     teacher = MambaESR(
         scale=cfg.scale,
         embed_dim=tcfg.embed_dim,
         num_rmmb=tcfg.num_rmmb,
         mixers_per_block=tcfg.mixers_per_block,
         low_rank=tcfg.low_rank,
-        use_gradient_checkpointing=True,
+        use_gradient_checkpointing=False,  # Disabled for speed
     ).to(device)
     print(f"Teacher parameters: {sum(p.numel() for p in teacher.parameters()):,}")
 

@@ -17,7 +17,7 @@ from tqdm import tqdm
 
 from src.config import CONFIG, TEACHER
 from src.data import create_dataloaders
-from src.model import MambaLiteSR
+from src.model import MambaESR
 from src.losses import FeatureDistillationLoss
 from src.utils import (
     calculate_psnr,
@@ -91,11 +91,12 @@ def main() -> None:
 
     writer = SummaryWriter(out_dir / "logs")
 
-    # Create dataloaders
+    # Create dataloaders with reduced batch size for teacher (memory optimization)
+    teacher_batch_size = min(cfg.batch_size // 2, 16)  # Reduce batch size for teacher
     train_loader, val_loader = create_dataloaders(
         data_root=cfg.data_root,
         scale=cfg.scale,
-        batch_size=cfg.batch_size,
+        batch_size=teacher_batch_size,
         lr_patch_size=cfg.patch_size,
         num_workers=cfg.num_workers,
     )
@@ -103,13 +104,14 @@ def main() -> None:
         f"Training batches: {len(train_loader)}, Validation batches: {len(val_loader)}"
     )
 
-    # Create teacher model (large)
-    teacher = MambaLiteSR(
+    # Create teacher model (large) with gradient checkpointing for memory efficiency
+    teacher = MambaESR(
         scale=cfg.scale,
         embed_dim=tcfg.embed_dim,
         num_rmmb=tcfg.num_rmmb,
         mixers_per_block=tcfg.mixers_per_block,
         low_rank=tcfg.low_rank,
+        use_gradient_checkpointing=True,
     ).to(device)
     print(f"Teacher parameters: {sum(p.numel() for p in teacher.parameters()):,}")
 

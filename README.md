@@ -193,7 +193,7 @@ This runs the complete baseline reproduction:
 
 ## 📊 **Current Baseline Results**
 
-**Baseline reproduction for MambaLiteSR with Knowledge Distillation**
+**Baseline reproduction for MambaESR with Knowledge Distillation**
 
 Reproducing baseline results: **Set5: 28.28 dB PSNR** using a 370K parameter student model with knowledge distillation.
 
@@ -216,8 +216,8 @@ Reproducing baseline results: **Set5: 28.28 dB PSNR** using a 370K parameter stu
 │   ├── train_pipeline.py     # Complete automated pipeline
 │   └── eval_benchmarks.py    # Step 3: Evaluate all benchmarks
 ├── 🔧 Core Implementation  
-│   └── src/mambalitesr/
-│       ├── model.py          # MambaLiteSR architecture
+│   └── src/mambaesr/
+│       ├── model.py          # MambaESR architecture
 │       ├── blocks.py         # Mamba blocks & components
 │       ├── losses.py         # Distillation & perceptual losses
 │       ├── data.py           # Datasets & data loading
@@ -227,9 +227,9 @@ Reproducing baseline results: **Set5: 28.28 dB PSNR** using a 370K parameter stu
 ├── 📊 Outputs
 │   └── runs/                 # Timestamped experiment results
 │       ├── latest/           # Symlink to latest experiment
-│       ├── mambalitesr_teacher_*/    # Teacher experiments
-│       ├── mambalitesr_student_*/    # Student experiments  
-│       └── mambalitesr_evaluation_*/ # Evaluation results
+│       ├── mambaesr_teacher_*/    # Teacher experiments
+│       ├── mambaesr_student_*/    # Student experiments  
+│       └── mambaesr_evaluation_*/ # Evaluation results
 └── 📁 Data & Docs
     ├── data/                 # Datasets (auto-downloaded)
     ├── scripts/              # Dataset download utilities
@@ -299,7 +299,7 @@ else:
 
 ## 📈 Hyperparameters
 
-Key settings in `src/mambalitesr/config.py`:
+Key settings in `src/mambaesr/config.py`:
 - **Knowledge Distillation:** `alpha=0.2` (best from baseline)
 - **Training:** 1000 epochs, batch size 32, LR 1e-4
 - **Optimization:** Learning rate warmup, early stopping
@@ -310,7 +310,7 @@ Key settings in `src/mambalitesr/config.py`:
 ## 🚀 Advanced Usage
 
 **Tune hyperparameters:**
-Edit `src/mambalitesr/config.py` and rerun training.
+Edit `src/mambaesr/config.py` and rerun training.
 
 **Enable perceptual loss:**
 ```python

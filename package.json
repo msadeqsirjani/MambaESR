@@ -1,0 +1,28 @@
+{
+  "name": "mambaesr",
+  "version": "1.0.0",
+  "description": "## 🎯 Project Purpose & Overview",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "prepare": "husky"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/msadeqsirjani/MambaESR.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/msadeqsirjani/MambaESR/issues"
+  },
+  "homepage": "https://github.com/msadeqsirjani/MambaESR#readme",
+  "devDependencies": {
+    "husky": "^9.1.7",
+    "lint-staged": "^16.1.6"
+  }
+}

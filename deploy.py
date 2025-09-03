@@ -1,6 +1,6 @@
 import torch
 from torch.utils.mobile_optimizer import optimize_for_mobile
-from src.mambalitesr.model import MambaLiteSR
+from src.model import MambaLiteSR
 
 
 def export_to_onnx(model, output_path, size=(256, 256)):

@@ -9,11 +9,11 @@ import torch
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
-from src.mambalitesr.config import CONFIG
-from src.mambalitesr.data import EvalImageFolder
-from src.mambalitesr.model import MambaLiteSR
-from src.mambalitesr.utils import calculate_psnr_y, calculate_ssim_y, load_checkpoint
-from src.mambalitesr.experiment_manager import (
+from src.config import CONFIG
+from src.data import EvalImageFolder
+from src.model import MambaLiteSR
+from src.utils import calculate_psnr_y, calculate_ssim_y, load_checkpoint
+from src.experiment_manager import (
     ExperimentManager,
     get_latest_experiment_dir,
 )

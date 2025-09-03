@@ -18,7 +18,6 @@ from tqdm import tqdm
 from src.config import CONFIG, TEACHER
 from src.data import create_dataloaders
 from src.model import MambaESR
-from src.losses import FeatureDistillationLoss
 from src.utils import (
     calculate_psnr,
     calculate_ssim,
